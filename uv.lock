@@ -528,17 +528,16 @@ dependencies = [
     { name = "vrchatapi" },
 ]
 
-[package.dev-dependencies]
+[package.optional-dependencies]
 dev = [
     { name = "pytest" },
     { name = "twine" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "vrchatapi", specifier = ">=1.20.7" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "twine", specifier = ">=6.2.0" },
+requires-dist = [
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
+    { name = "twine", marker = "extra == 'dev'", specifier = ">=6.2.0" },
+    { name = "vrchatapi", specifier = ">=1.20.7" },
 ]
+provides-extras = ["dev"]
