@@ -1,1 +1,0 @@
-from .CookieData import Cookie
