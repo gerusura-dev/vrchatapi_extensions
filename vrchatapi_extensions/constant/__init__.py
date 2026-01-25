@@ -7,7 +7,4 @@ can be utilized throughout the program wherever applicable.
 """
 
 
-from .constant import (
-    AGENT,
-    COOKIE
-)
+from vrchatapi_extensions.constant import constant

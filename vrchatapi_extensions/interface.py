@@ -10,8 +10,8 @@ user-related settings.
 from multiprocessing import pool
 from typing import Optional
 
-from . import authentication
-from .data import Cookie
+from vrchatapi_extensions import authentication
+from vrchatapi_extensions.data import Cookie
 
 
 class Interface:

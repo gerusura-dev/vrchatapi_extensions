@@ -7,4 +7,4 @@ utilities related to cookie management.
 """
 
 
-from .cookie_data import Cookie
+from vrchatapi_extensions.data.cookie_data import Cookie

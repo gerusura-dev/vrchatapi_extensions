@@ -10,8 +10,8 @@ if they are not None; otherwise, it prompts for standard input.
 from multiprocessing import pool
 from typing import Tuple, Optional
 
-from ..data import Cookie
-from ..utils.login_utils import (
+from vrchatapi_extensions.data import Cookie
+from vrchatapi_extensions.utils.login_utils import (
     manual_login,
     cookie_login
 )

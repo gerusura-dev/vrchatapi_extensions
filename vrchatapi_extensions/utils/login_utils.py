@@ -21,8 +21,8 @@ from vrchatapi.api.authentication_api import AuthenticationApi
 from vrchatapi.models.two_factor_auth_code import TwoFactorAuthCode
 from vrchatapi.models.two_factor_email_code import TwoFactorEmailCode
 
-from ..data.cookie_data import Cookie
-from ..constant import constant
+from vrchatapi_extensions.data import Cookie
+from vrchatapi_extensions.constant import constant
 
 
 def manual_login(

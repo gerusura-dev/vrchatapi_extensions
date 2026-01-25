@@ -12,9 +12,9 @@ enhance extensibility and modularity in related applications.
 """
 
 
-from . import authentication
-from .data import Cookie
-from .interface import Interface
+from vrchatapi_extensions import authentication
+from vrchatapi_extensions.data import Cookie
+from vrchatapi_extensions.interface import Interface
 
 
 __all__ = [

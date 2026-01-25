@@ -11,7 +11,7 @@ from typing import Dict, Optional
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
 
-from ..constant import constant
+from vrchatapi_extensions.constant import constant
 
 
 @dataclass(frozen=True, slots=True)

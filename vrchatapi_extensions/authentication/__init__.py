@@ -7,4 +7,4 @@ operations or processes defined elsewhere.
 """
 
 
-from .login import login
+from vrchatapi_extensions.authentication.login import login
