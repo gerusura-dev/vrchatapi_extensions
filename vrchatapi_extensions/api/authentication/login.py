@@ -1,35 +1,69 @@
 """
-This module provides functionalities for logging into the VRChat API. It includes
-support for manual login, cookie-based login, and handling two-factor authentication.
-The module ensures user credentials and authentication processes are properly managed,
-with options for secure user input.
+Provides functionality to get authentication required to use the VRChat API.
 
-The primary functionalities of the module include:
-- Manual login with username/password and optional two-factor authentication handling.
-- Cookie-based login to reuse existing authentication sessions.
+Primarily logs in using a cookie, so username and password are typically set to None. If there is
+no cookie or login with the cookie is denied, the function uses the provided username and password
+if they are not None; otherwise, it prompts for standard input.
 """
 
 
+# SECTION: Packages(Built-in)
 import getpass
 from multiprocessing import pool
-from typing import Tuple, Optional
+from typing import Dict, Optional
 
+# SECTION: Packages(Third-Party)
 import vrchatapi
+from vrchatapi.api.authentication_api import AuthenticationApi
 from vrchatapi.api_client import ApiClient
 from vrchatapi.exceptions import UnauthorizedException
-from vrchatapi.api.authentication_api import AuthenticationApi
 from vrchatapi.models.two_factor_auth_code import TwoFactorAuthCode
 from vrchatapi.models.two_factor_email_code import TwoFactorEmailCode
 
-from vrchatapi_extensions.data import Cookie
+# SECTION: Packages(Local)
 from vrchatapi_extensions.constant import constant
+from vrchatapi_extensions.utils import CookieVault
 
 
-def manual_login(
+# SECTION: Public Functions
+def login(
     username: Optional[str] = None,
     password: Optional[str] = None,
     agent: Optional[str] = None
-) -> Tuple[pool.ApplyResult, Optional[Cookie]]:
+) -> Optional[pool.ApplyResult]:
+
+    """
+    Authenticate a user using provided credentials or stored cookies. Tries to log in
+    by using cookies if they are active; otherwise, falls back to the manual login method.
+
+    :param username: Optional; the username to be used for manual login
+    :param password: Optional; the password associated with the username for manual login
+    :param agent: Optional; the user agent string used during the login process
+    :return: A pool.ApplyResult object if login is successful, otherwise None
+    """
+
+    # Initialize
+    user:   Optional[pool.ApplyResult]
+    vault:  CookieVault
+
+    # Process
+    vault = CookieVault()
+    vault.load()
+    if vault.is_active:
+        user = __cookie_login(agent, vault)
+    else:
+        user = __manual_login(username, password, agent, vault)
+
+    return user
+
+
+# SECTION: Private Functions
+def __manual_login(
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    agent: Optional[str] = None,
+    vault: CookieVault = CookieVault()
+) -> pool.ApplyResult:
 
     """
     Performs a manual login to the VRChat API and optionally saves a session cookie.
@@ -46,7 +80,7 @@ def manual_login(
     :return: A tuple consisting of the user information result and an optional
         session cookie. If authentication fails, the cookie will be None.
     :rtype: Tuple[pool.ApplyResult, Optional[Cookie]]
-    :raises UnauthorizedException: If the username and password authentication fails
+    :raises UnauthorizedException: If the username and password authentication fails,
         or two-factor authentication is not successfully completed.
     """
 
@@ -56,7 +90,7 @@ def manual_login(
     auth:   AuthenticationApi
     user:   pool.ApplyResult
     header: Optional[str]
-    cookie: Optional[Cookie]
+    cookie: Optional[Dict[str, str]]
 
     # Process
     agent = agent or constant.AGENT
@@ -77,24 +111,24 @@ def manual_login(
 
     try:
         user, _, header = auth.get_current_user_with_http_info()
-        cookie = Cookie.extract(header)
+        cookie = vault.extract(header)
         if cookie is not None:
-            cookie.save()
+            vault.save(cookie)
     except UnauthorizedException as e:
         auth = __two_factor_auth(auth, e.reason)
         user, _, header = auth.get_current_user_with_http_info()
-        cookie = Cookie.extract(header)
+        cookie = vault.extract(header)
         if cookie is None:
-            cookie = Cookie.extract(e.headers)
-        cookie.save()
+            cookie = vault.extract(e.headers)
+        vault.save(cookie)
 
-    return user, cookie
+    return user
 
 
-def cookie_login(
-    cookie: Cookie,
-    agent: Optional[str] = None
-) -> Tuple[pool.ApplyResult, Optional[Cookie]]:
+def __cookie_login(
+    agent: Optional[str] = None,
+    vault: CookieVault = CookieVault()
+) -> pool.ApplyResult:
 
     """
     Logs into a system using a given cookie and optionally an agent string. This
@@ -102,8 +136,6 @@ def cookie_login(
     performs authentication using the supplied cookie. If the cookie is invalid,
     it attempts a manual login and saves the new cookie if successfully retrieved.
 
-    :param cookie: Authentication cookie containing necessary credentials.
-    :type cookie: Cookie
     :param agent: Optional user agent string. Defaults to a pre-defined constant.
     :type agent: Optional[str]
     :return: A tuple containing the user object wrapped in a `pool.ApplyResult`
@@ -114,32 +146,24 @@ def cookie_login(
     # Initialize
     config: vrchatapi.Configuration
     client: ApiClient
-    header: Optional[str]
     auth:   AuthenticationApi
     user:   pool.ApplyResult
-    cookie: Optional[Cookie]
 
     # Process
     agent = agent or constant.AGENT
-
     config = vrchatapi.Configuration()
 
     with ApiClient(config) as client:
         client.user_agent = agent
-
-        header = f"auth={cookie.auth}"
-        client.default_headers["Cookie"] = header
-
+        vault.set_configuration(client)
         auth = AuthenticationApi(client)
 
     try:
         user = auth.get_current_user()
     except UnauthorizedException:
-        user, cookie = manual_login(agent=agent)
-        if cookie is not None:
-            cookie.save()
+        user = __manual_login(agent=agent, vault=vault)
 
-    return user, cookie
+    return user
 
 
 def __two_factor_auth(
@@ -156,7 +180,7 @@ def __two_factor_auth(
     :type auth: AuthenticationApi
     :param reason: Description of the reason triggering two-factor authentication.
         This determines the type of authentication that should be processed.
-    :type reason: str
+    :type reason: Str
     :return: The updated AuthenticationApi instance after the relevant two-factor
         authentication code is verified.
     :rtype: AuthenticationApi

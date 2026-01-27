@@ -6,5 +6,9 @@ a default path for storing the cookie used in API authentication.
 """
 
 
-AGENT = "vrchatapi-extensions/0.0.0 ext@email.com"
-COOKIE = "./cookie.json"
+# SECTION: Packages(Built-in)
+from pathlib import Path
+
+# SECTION: Constants
+AGENT:  str  = "vrchatapi-extensions/0.0.0 ext@email.com"
+COOKIE: Path = Path.home() / ".config" / "vrchatapi_extensions" / "cookie.enc"

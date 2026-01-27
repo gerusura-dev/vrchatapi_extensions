@@ -12,13 +12,8 @@ enhance extensibility and modularity in related applications.
 """
 
 
-from vrchatapi_extensions import authentication
-from vrchatapi_extensions.data import Cookie
 from vrchatapi_extensions.interface import Interface
 
-
 __all__ = [
-    "Cookie",
-    "Interface",
-    "authentication"
+    "Interface"
 ]

@@ -40,7 +40,7 @@ vrchatapiのリファレンスは[こちら](https://vrchat.community/)。
 1. **uv sync**
 
     ```bash
-    uv sync --extra dev
+    uv sync --dev
     ```
 
 2. 

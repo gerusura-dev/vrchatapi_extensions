@@ -7,13 +7,15 @@ user-related settings.
 """
 
 
+# SECTION: Packages(Built-in)
 from multiprocessing import pool
 from typing import Optional
 
-from vrchatapi_extensions import authentication
-from vrchatapi_extensions.data import Cookie
+# SECTION: Packages(Local)
+from vrchatapi_extensions.api import Authentication
 
 
+# SECTION: Public Classes
 class Interface:
 
     """
@@ -46,18 +48,18 @@ class Interface:
         """
 
         # Initialize
-        self.user:     Optional[pool.ApplyResult]
-        self.agent:    Optional[str]
-        self.__cookie: Optional[Cookie]
+        self.user:  Optional[pool.ApplyResult]
+        self.agent: Optional[str]
 
         # Process
         self.user = None
         self.agent = agent
-        self.__cookie = None
 
-        self.__login(username, password, agent)
+        self.login(username, password, agent)
 
-    def __login(
+    # SECTION: Public Functions
+    # SECTION: Authentication
+    def login(
         self,
         username: Optional[str] = None,
         password: Optional[str] = None,
@@ -80,4 +82,4 @@ class Interface:
         """
 
         # Process
-        self.user, self.__cookie = authentication.login(username, password, agent)
+        self.user = Authentication.login(username, password, agent)
