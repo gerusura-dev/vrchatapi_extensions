@@ -7,5 +7,4 @@ operations or processes defined elsewhere.
 """
 
 
-from vrchatapi_extensions.api.authentication.authentication import \
-    Authentication
+from .authentication import Authentication

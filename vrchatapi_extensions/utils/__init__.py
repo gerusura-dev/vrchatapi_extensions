@@ -9,4 +9,4 @@ useful methods for handling cookie storage and retrieval.
 """
 
 
-from vrchatapi_extensions.utils.crypto import CookieVault
+from .crypto import CookieVault

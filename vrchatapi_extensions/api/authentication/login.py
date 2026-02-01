@@ -1,19 +1,22 @@
 """
-Provides functionality to get authentication required to use the VRChat API.
 
-Primarily logs in using a cookie, so username and password are typically set to None. If there is
-no cookie or login with the cookie is denied, the function uses the provided username and password
-if they are not None; otherwise, it prompts for standard input.
+VRChatAPIを用いたログイン処理を行う機能を提供する
+マニュアルログインとCookieログインを自動的に実行する
+
+- login(): ログイン処理を行う
+
 """
 
 
+# SECTION: Packages(Type Annotation)
+from typing import Dict, Optional
+
 # SECTION: Packages(Built-in)
 import getpass
-from multiprocessing import pool
-from typing import Dict, Optional
 
 # SECTION: Packages(Third-Party)
 import vrchatapi
+from tenacity import retry, stop_after_attempt, wait_fixed
 from vrchatapi.api.authentication_api import AuthenticationApi
 from vrchatapi.api_client import ApiClient
 from vrchatapi.exceptions import UnauthorizedException
@@ -21,80 +24,96 @@ from vrchatapi.models.two_factor_auth_code import TwoFactorAuthCode
 from vrchatapi.models.two_factor_email_code import TwoFactorEmailCode
 
 # SECTION: Packages(Local)
+from vrchatapi_extensions.api.authentication.payload import LoginResponse
 from vrchatapi_extensions.constant import constant
 from vrchatapi_extensions.utils import CookieVault
 
 
 # SECTION: Public Functions
+@retry(
+    stop=stop_after_attempt(constant.LOGIN_RETRY_LIMIT),
+    wait=wait_fixed(constant.LOGIN_RETRY_WAIT)
+)
 def login(
     username: Optional[str] = None,
     password: Optional[str] = None,
-    agent: Optional[str] = None
-) -> Optional[pool.ApplyResult]:
+    agent:    str           = constant.AGENT
+) -> LoginResponse:
 
     """
-    Authenticate a user using provided credentials or stored cookies. Tries to log in
-    by using cookies if they are active; otherwise, falls back to the manual login method.
 
-    :param username: Optional; the username to be used for manual login
-    :param password: Optional; the password associated with the username for manual login
-    :param agent: Optional; the user agent string used during the login process
-    :return: A pool.ApplyResult object if login is successful, otherwise None
+    マニュアルログインとCookieログインを自動で実行する機能を提供する
+    CookieVaultのis_active値がTrue（Cookieの読み込みに成功した）場合はCookieによるログインを試行する
+    CookieVaultのis_active値がFalseの場合はマニュアルログインを試行する
+    もしCookieログインに失敗した場合は自動的にマニュアルログインにフォールバックする
+    ログイン試行は3回までリトライできる
+
+    :param username: ログインに使うユーザー名またはEmailアドレス
+    :type username: Optional[str]
+
+    :param password: ログインに使うパスワード
+    :type password: Optional[str]
+
+    :param agent: ログインリクエストに添付するエージェント文字列（NoneでConstant値を利用）
+    :type agent: str
+
+    :return: LoginResultオブジェクト（APIサーバーからのレスポンス）
+    :rtype: LoginResponse
+
     """
 
     # Initialize
-    user:   Optional[pool.ApplyResult]
-    vault:  CookieVault
+    response: Optional[LoginResponse]
+    vault:    CookieVault
 
     # Process
     vault = CookieVault()
     vault.load()
     if vault.is_active:
-        user = __cookie_login(agent, vault)
+        response = __cookie_login(agent, vault)
     else:
-        user = __manual_login(username, password, agent, vault)
+        response = __manual_login(username, password, agent, vault)
 
-    return user
+    return response
 
 
 # SECTION: Private Functions
 def __manual_login(
     username: Optional[str] = None,
     password: Optional[str] = None,
-    agent: Optional[str] = None,
-    vault: CookieVault = CookieVault()
-) -> pool.ApplyResult:
+    agent:    str           = constant.AGENT,
+    vault:    CookieVault   = CookieVault()
+) -> LoginResponse:
 
     """
-    Performs a manual login to the VRChat API and optionally saves a session cookie.
-    If no username or password is provided, the function prompts the user to manually
-    enter the credentials. If two-factor authentication is required, the appropriate
-    procedure is performed automatically.
 
-    :param username: The username or email address of the VRChat account. Optional;
-        if not provided, the function will prompt for input (default is None).
-    :param password: The password of the VRChat account. Optional; if not provided,
-        the function will prompt for input (default is None).
-    :param agent: The user agent string to identify the client. Optional;
-        defaults to the value defined in Constant.AGENT if not provided.
-    :return: A tuple consisting of the user information result and an optional
-        session cookie. If authentication fails, the cookie will be None.
-    :rtype: Tuple[pool.ApplyResult, Optional[Cookie]]
-    :raises UnauthorizedException: If the username and password authentication fails,
-        or two-factor authentication is not successfully completed.
+    ユーザー名（Emailアドレス）とパスワードでログインを試行する機能を提供する
+
+    :param username: ログインに使うユーザー名またはEmailアドレス
+    :type username: Optional[str]
+
+    :param password: ログインに使うパスワード
+    :type password: Optional[str]
+
+    :param agent: ログインリクエストに添付するエージェント文字列（NoneでConstant値を利用）
+    :type agent: str
+
+    :param vault: マニュアルログインで得たCookieを保存するためのCookieVaultオブジェクト
+    :type vault: CookieVault
+
+    :return: LoginResultオブジェクト（APIサーバーからのレスポンス）
+    :rtype: LoginResponse
+
     """
 
     # Initialize
-    config: vrchatapi.Configuration
-    client: ApiClient
-    auth:   AuthenticationApi
-    user:   pool.ApplyResult
-    header: Optional[str]
-    cookie: Optional[Dict[str, str]]
+    config:   vrchatapi.Configuration
+    client:   ApiClient
+    auth:     AuthenticationApi
+    response: LoginResponse
+    cookie:   Optional[Dict[str, str]]
 
     # Process
-    agent = agent or constant.AGENT
-
     if username is None:
         username = input("Username or Email: ")
     if password is None:
@@ -109,48 +128,50 @@ def __manual_login(
         client.user_agent = agent
         auth = AuthenticationApi(client)
 
-    try:
-        user, _, header = auth.get_current_user_with_http_info()
-        cookie = vault.extract(header)
-        if cookie is not None:
+        try:
+            response = LoginResponse(*auth.get_current_user_with_http_info())
+            cookie = vault.extract(response.headers)
+            if cookie is not None:
+                vault.save(cookie)
+        except UnauthorizedException as e:
+            auth = __two_factor_auth(auth, e.reason)
+            response = LoginResponse(*auth.get_current_user_with_http_info())
+            cookie = vault.extract(response.headers)
+            if cookie is None:
+                cookie = vault.extract(e.headers)
             vault.save(cookie)
-    except UnauthorizedException as e:
-        auth = __two_factor_auth(auth, e.reason)
-        user, _, header = auth.get_current_user_with_http_info()
-        cookie = vault.extract(header)
-        if cookie is None:
-            cookie = vault.extract(e.headers)
-        vault.save(cookie)
 
-    return user
+    return response
 
 
 def __cookie_login(
-    agent: Optional[str] = None,
+    agent: str         = constant.AGENT,
     vault: CookieVault = CookieVault()
-) -> pool.ApplyResult:
+) -> LoginResponse:
 
     """
-    Logs into a system using a given cookie and optionally an agent string. This
-    function initializes the client configuration, sets up the user agent, and
-    performs authentication using the supplied cookie. If the cookie is invalid,
-    it attempts a manual login and saves the new cookie if successfully retrieved.
 
-    :param agent: Optional user agent string. Defaults to a pre-defined constant.
-    :type agent: Optional[str]
-    :return: A tuple containing the user object wrapped in a `pool.ApplyResult`
-        and optionally the updated authentication cookie.
-    :rtype: Tuple[pool.ApplyResult, Optional[Cookie]]
+    端末に保存されたCookieを用いてログイン処理を実行する機能を提供する
+    Cookieによるログインリクエストが失敗した場合、自動的にマニュアルログインにフォールバックする
+
+    :param agent: ログインリクエストに添付するエージェント文字列（NoneでConstant値を利用）
+    :type agent: str
+
+    :param vault: 端末に保存されたCookieの情報をマネジメントするオブジェクト
+    :type vault: CookieVault
+
+    :return: LoginResultオブジェクト（APIサーバーからのレスポンス）
+    :rtype: LoginResponse
+
     """
 
     # Initialize
     config: vrchatapi.Configuration
     client: ApiClient
     auth:   AuthenticationApi
-    user:   pool.ApplyResult
+    response: LoginResponse
 
     # Process
-    agent = agent or constant.AGENT
     config = vrchatapi.Configuration()
 
     with ApiClient(config) as client:
@@ -158,32 +179,32 @@ def __cookie_login(
         vault.set_configuration(client)
         auth = AuthenticationApi(client)
 
-    try:
-        user = auth.get_current_user()
-    except UnauthorizedException:
-        user = __manual_login(agent=agent, vault=vault)
+        try:
+            response = LoginResponse(*auth.get_current_user_with_http_info())
+        except UnauthorizedException:
+            response = __manual_login(agent=agent, vault=vault)
 
-    return user
+    return response
 
 
 def __two_factor_auth(
-    auth: AuthenticationApi,
+    auth:   AuthenticationApi,
     reason: str
 ) -> AuthenticationApi:
 
     """
-    Handles two-factor authentication based on the provided reason and initializes
-    the verification process with input codes from the user.
 
-    :param auth: A reference to the AuthenticationApi instance used for verifying
-        two-factor authentication codes.
+    マニュアルログイン時に2段階認証を要求された場合に認証を実行する機能を提供する
+
+    :param auth: ログインリクエストを行う機能を提供するAuthenticationApiオブジェクト
     :type auth: AuthenticationApi
-    :param reason: Description of the reason triggering two-factor authentication.
-        This determines the type of authentication that should be processed.
-    :type reason: Str
-    :return: The updated AuthenticationApi instance after the relevant two-factor
-        authentication code is verified.
-    :rtype: AuthenticationApi
+
+    :param reason: マニュアルログインが否認された理由（内容に応じて処理内容が異なる）
+    :type reason: str
+
+    :return: 2段階認証コードを設定したAuthenticationApiオブジェクト
+    :type: AuthenticationApi
+
     """
 
     # Initialize
@@ -192,13 +213,9 @@ def __two_factor_auth(
     # Process
     if "Email 2 Factor Authentication" in reason:
         code = input("Email 2FA Code: ")
-        auth.verify2_fa_email_code(
-            two_factor_email_code=TwoFactorEmailCode(code)
-        )
+        auth.verify2_fa_email_code(two_factor_email_code=TwoFactorEmailCode(code))
     elif "2 Factor Authentication" in reason:
         code = input("2FA Code: ")
-        auth.verify2_fa(
-            two_factor_auth_code=TwoFactorAuthCode(code)
-        )
+        auth.verify2_fa(two_factor_auth_code=TwoFactorAuthCode(code))
 
     return auth

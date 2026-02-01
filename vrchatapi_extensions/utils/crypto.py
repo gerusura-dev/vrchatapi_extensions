@@ -1,15 +1,16 @@
 """
-A module that provides functionality for securely storing, loading, and retrieving
-encrypted cookie data.
 
-The `CookieVault` class is implemented using Python dataclasses. It interacts with
-an underlying storage mechanism for securely handling cookies, providing encryption
-and decryption operations alongside utility methods for setting configurations.
+認証に使用するCookieを管理するクラス
 
-Classes:
-    CookieVault: A class for managing encrypted cookies.
 """
 
+
+# SECTION: Packages(Type Annotation)
+from typing import (
+    Any,
+    Dict,
+    Optional
+)
 
 # SECTION: Packages(Built-in)
 import json
@@ -18,16 +19,17 @@ from contextlib import suppress
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
 from pathlib import Path
-from typing import Any, Dict, Optional
 
 # SECTION: Packages(Third-Party)
 import keyring
 from cryptography.fernet import Fernet
+from vrchatapi import ApiClient
 
 # SECTION: Packages(Local)
 from vrchatapi_extensions.constant import constant
 
 
+# SECTION: Public Classes
 @dataclass(slots=True)
 class CookieVault:
 
@@ -41,11 +43,10 @@ class CookieVault:
     """
 
     # Initialize
-    service_name: str  = "vrchatapi_extensions"
-    account_name: str  = "cookie-dek"
-    store_path:   Path = constant.COOKIE
-
-    _ciphertext: Optional[bytes] = None
+    service_name: str             = "vrchatapi_extensions"
+    account_name: str             = "cookie-dek"
+    store_path:   Path            = constant.COOKIE
+    _ciphertext:  Optional[bytes] = None
 
     # SECTION: Properties
     @property
@@ -81,7 +82,10 @@ class CookieVault:
         else:
             self._ciphertext = None
 
-    def save(self, cookies: Dict[str, str]) -> None:
+    def save(
+        self,
+        cookies: Dict[str, str]
+    ) -> None:
 
         """
         Saves the given cookies securely by encrypting and storing them in a specified path.
@@ -106,10 +110,14 @@ class CookieVault:
         self.store_path.write_bytes(token)
         self._ciphertext = token
 
+        # NOTE: Windowsではchmodがサポートされていないが、実行する必要がないのでエラーを握りつぶす
         with suppress(Exception):
             os.chmod(self.store_path, 0o600)
 
-    def get(self, key: str) -> Optional[str]:
+    def get(
+        self,
+        key: str
+    ) -> Optional[str]:
 
         """
         Retrieves the value associated with the given key from a decrypted data dictionary.
@@ -123,15 +131,19 @@ class CookieVault:
         """
 
         # Initialize
-        data: Dict[str, Any]
-        v:    Optional[str]
+        data:  Dict[str, Any]
+        value: Optional[str]
 
         # Process
         data = self._decrypt()
-        v = data.get(key)
-        return v if isinstance(v, str) else None
+        value = data.get(key)
 
-    def set_configuration(self, client) -> None:
+        return value if isinstance(value, str) else None
+
+    def set_configuration(
+        self,
+        client: ApiClient
+    ) -> None:
 
         """
         Sets the configuration for the provided client by extracting authentication
@@ -145,8 +157,9 @@ class CookieVault:
         """
 
         # Initialize
-        auth:   Optional[str]
-        twofa:  Optional[str]
+        auth:  Optional[str]
+        twofa: Optional[str]
+
         header: str = ""
 
         # Process
@@ -276,4 +289,5 @@ class CookieVault:
         if not self._ciphertext:
             raise RuntimeError("cookie vault is empty. call load() or save() first.")
         plain = self._fernet().decrypt(self._ciphertext)
+
         return json.loads(plain.decode("utf-8"))

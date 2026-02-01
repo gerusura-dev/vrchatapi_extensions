@@ -12,8 +12,10 @@ enhance extensibility and modularity in related applications.
 """
 
 
+from vrchatapi_extensions.api import Authentication
 from vrchatapi_extensions.interface import Interface
 
 __all__ = [
-    "Interface"
+    "Interface",
+    "Authentication"
 ]
